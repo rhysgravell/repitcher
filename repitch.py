@@ -282,11 +282,13 @@ def main() -> int:
         epilog=__doc__.split("Examples\n--------\n")[-1],
     )
     ap.add_argument("input", type=Path, help="audio file or folder")
-    ap.add_argument("--to", dest="to_key", help="target key, e.g. Cm, F#m, Amaj")
     ap.add_argument("--from", dest="from_key",
                     help="source key override (default: read from filename)")
-    ap.add_argument("--semitones", type=float,
-                    help="shift by a fixed number of semitones, ignoring keys")
+    shift_group = ap.add_mutually_exclusive_group()
+    shift_group.add_argument("--to", dest="to_key",
+                             help="target key, e.g. Cm, F#m, Amaj")
+    shift_group.add_argument("--semitones", type=float,
+                             help="shift by a fixed number of semitones, ignoring keys")
     ap.add_argument("-o", "--out", type=Path, default=None,
                     help="output folder (default: alongside the input)")
     ap.add_argument("-r", "--recursive", action="store_true",
