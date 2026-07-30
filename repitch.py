@@ -199,7 +199,7 @@ def probe_samplerate(src: Path) -> int:
 
 
 def build_command(engine: str, src: Path, dst: Path, semitones: float,
-                  tape: bool, quality: str) -> list[str]:
+                  tape: bool, quality: str, formants: bool = False) -> list[str]:
     if tape:
         # Varispeed: pitch and speed move together, like a tape machine.
         ratio = 2 ** (semitones / 12)
@@ -220,13 +220,16 @@ def build_command(engine: str, src: Path, dst: Path, semitones: float,
         cmd = ["rubberband", "-p", f"{semitones:g}"]
         if quality == "high":
             cmd += ["--fine", "--pitch-hq"]
+        if formants:
+            cmd += ["--formant"]
         cmd += [str(src), str(dst)]
         return cmd
 
     if engine == "ffmpeg":
+        formant_opt = ":formant=preserved" if formants else ""
         return [
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
-            "-af", f"rubberband=pitch={2 ** (semitones / 12):.9f}:pitchq=quality",
+            "-af", f"rubberband=pitch={2 ** (semitones / 12):.9f}:pitchq=quality{formant_opt}",
             str(dst),
         ]
 
@@ -296,8 +299,12 @@ def main() -> int:
     ap.add_argument("--direction", choices=["nearest", "up", "down"],
                     default="nearest",
                     help="which way to transpose (default: nearest, max 6st)")
-    ap.add_argument("--tape", action="store_true",
-                    help="varispeed - pitch and tempo move together")
+    mode_group = ap.add_mutually_exclusive_group()
+    mode_group.add_argument("--tape", action="store_true",
+                            help="varispeed - pitch and tempo move together")
+    mode_group.add_argument("--formants", action="store_true",
+                            help="preserve formants when pitch-shifting - less "
+                                 "'chipmunk' effect on vocals (rubberband/ffmpeg only)")
     ap.add_argument("--engine", choices=["auto", "rubberband", "ffmpeg", "sox"],
                     default="auto")
     ap.add_argument("--quality", choices=["normal", "high"], default="high")
@@ -327,6 +334,9 @@ def main() -> int:
             ap.error(f"could not parse source key: {args.from_key!r}")
 
     engine = detect_engine(args.engine)
+    if args.formants and engine == "sox":
+        print("note: sox has no formant preservation - shifting without it.\n")
+
     files = collect_files(args.input, args.recursive)
     if not files:
         print("No audio files found.", file=sys.stderr)
@@ -381,7 +391,8 @@ def main() -> int:
             continue
 
         out_dir.mkdir(parents=True, exist_ok=True)
-        cmd = build_command(engine, src, dst, shift, args.tape, args.quality)
+        cmd = build_command(engine, src, dst, shift, args.tape, args.quality,
+                           args.formants)
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             lines = proc.stderr.strip().splitlines()
