@@ -47,6 +47,7 @@ chmod +x repitch.py
 | `-r, --recursive` | Recurse into subfolders |
 | `--direction` | `nearest` (default, max 6st), `up`, `down` |
 | `--tape` | Varispeed - pitch and tempo move together |
+| `--formants` | Preserve formants (less "chipmunk" effect on vocals) - rubberband/ffmpeg only |
 | `--quality` | `high` (default) or `normal` |
 | `--dry-run` | Print the plan, render nothing |
 | `--overwrite` | Replace existing outputs |
@@ -72,6 +73,9 @@ Keys without an explicit mode default to **minor**.
   atmospheres, obvious on vocals and acoustic percussion.
 - `--tape` is often the better choice for dub techno - the artefacts are
   the point, and it keeps the transient character intact.
+- `--formants` helps on vocals and other formant-heavy sources when shifting
+  more than a couple of semitones. It's ignored by sox, and mutually
+  exclusive with `--tape` (varispeed shifts formants by design).
 
 ## Tests
 

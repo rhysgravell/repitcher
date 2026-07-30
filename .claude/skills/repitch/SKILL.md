@@ -59,6 +59,7 @@ brew install rubberband
 |---|---|
 | `--direction up` / `down` | Override the default nearest-interval (max 6st) transposition |
 | `--tape` | Varispeed mode - pitch and tempo move together. Good for dub techno / lo-fi character, bad when tempo must stay fixed |
+| `--formants` | Preserve formants - reduces the "chipmunk" effect on vocals and other formant-heavy sources for shifts past a couple of semitones. rubberband/ffmpeg only; mutually exclusive with `--tape` |
 | `--quality normal` | Faster, lower-quality render than the default `high` |
 | `--engine rubberband\|ffmpeg\|sox` | Force a specific engine instead of auto-detect |
 | `--max-shift N` | Change the semitone threshold for the "large shift" warning (default 7) |
@@ -72,3 +73,6 @@ brew install rubberband
   change the mode. Flag this if the user asks to go e.g. Gm -> C major.
 - Filenames with no parseable key (no accidental, no mode marker) are
   skipped with an explanation - suggest `--from <key>` or `--semitones`.
+- If the source sounds like vocals (or the shift is more than a couple of
+  semitones) and the engine is rubberband or ffmpeg, consider suggesting
+  `--formants` to avoid a chipmunked result.
