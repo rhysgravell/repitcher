@@ -1,4 +1,5 @@
-import sys; sys.path.insert(0,'.')
+import sys
+sys.path.insert(0, '.')
 from repitch import parse_key, semitone_distance, Key, output_name
 from pathlib import Path
 
@@ -31,3 +32,4 @@ for src,exp in [("Chord_Stab_Gm_124.wav","Chord_Stab_Cm_124.wav"),("Pad_Gminor.a
     print(f"{'ok ' if ok else 'FAIL'}  {src} -> {out.name} (want {exp})")
 
 print(f"\n{fails} failures")
+sys.exit(1 if fails else 0)
