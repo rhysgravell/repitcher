@@ -30,6 +30,7 @@ import re
 import shutil
 import subprocess
 import sys
+import wave
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,9 +57,6 @@ PITCH_CLASS = {
 
 # Preferred spelling when we name the output file.
 SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-MINOR_WORDS = ("minor", "min", "m")
-MAJOR_WORDS = ("major", "maj", "M")
 
 
 @dataclass(frozen=True)
@@ -136,11 +134,7 @@ def _build_key(m: re.Match | None) -> Key | None:
     # Default to minor - it is by far the more common convention in sample packs
     # and in dub techno in particular. "Gm" and "G" both read as minor unless
     # explicitly marked major.
-    minor = True
-    if mode in ("major", "maj"):
-        minor = False
-    elif mode == "M" and m.group("mode") == "M":
-        minor = False
+    minor = mode not in ("major", "maj", "M")
     return Key(pc, minor)
 
 
@@ -186,6 +180,12 @@ def detect_engine(preferred: str | None = None) -> str:
 
 def probe_samplerate(src: Path) -> int:
     """Read the sample rate, falling back to 44100 if we can't."""
+    if src.suffix.lower() == ".wav":
+        try:
+            with wave.open(str(src), "rb") as wf:
+                return wf.getframerate()
+        except (wave.Error, OSError, EOFError):
+            pass
     if shutil.which("ffprobe"):
         proc = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "a:0",
@@ -195,6 +195,9 @@ def probe_samplerate(src: Path) -> int:
         val = proc.stdout.strip()
         if val.isdigit():
             return int(val)
+    print(f"        warning: could not read sample rate for {src.name}, "
+          f"assuming 44100 Hz - install ffprobe (ffmpeg) for accurate "
+          f"--tape shifts on non-44.1kHz sources", file=sys.stderr)
     return 44100
 
 
@@ -345,9 +348,16 @@ def main() -> int:
     print(f"engine: {engine}   files: {len(files)}"
           f"{'   (dry run)' if args.dry_run else ''}\n")
 
+    input_root = args.input if args.input.is_dir() else args.input.parent
+
     done = skipped = failed = 0
     for src in files:
-        out_dir = args.out or src.parent
+        if args.out:
+            # Mirror the source's subfolder under -o so recursive runs don't
+            # flatten same-named files from different subfolders into one.
+            out_dir = args.out / src.parent.relative_to(input_root)
+        else:
+            out_dir = src.parent
         src_key = None
 
         if args.semitones is not None:
