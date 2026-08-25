@@ -26,8 +26,21 @@ for a,b,exp in [("Gm","Cm",5),("Gm","Am",2),("Cm","Gm",-5),("Am","Gm",-2),("Cm",
     print(f"{'ok ' if ok else 'FAIL'}  {a} -> {b} = {d:+d}st (want {exp:+d})")
 
 print()
-for src,exp in [("Chord_Stab_Gm_124.wav","Chord_Stab_Cm_124.wav"),("Pad_Gminor.aif","Pad_Cm.aif")]:
-    out = output_name(Path(src), parse_key(src), parse_key("Cm",strict=True), 5, Path("."))
+naming = [
+ ("Chord_Stab_Gm_124.wav","Chord_Stab_Cm_124.wav"),
+ ("Pad_Gminor.aif","Pad_Cm.aif"),
+ # flat and unicode spellings name the same pitch class as the sharp one
+ ("Bass_Bbm_70.wav","Bass_Cm_70.wav"),
+ ("Bass_Bb_m_70.wav","Bass_Cm_70.wav"),
+ ("Rhodes_Ebm_118.wav","Rhodes_Cm_118.wav"),
+ ("loop-Abmaj-90.wav","loop-Cm-90.wav"),
+ ("Stab_A♯m_128.wav","Stab_Cm_128.wav"),
+]
+# no key token in the name (--from override) -> append rather than replace
+naming.append(("Sub_deep.wav","Sub_deep_Cm.wav"))
+for src,exp in naming:
+    src_key = parse_key(src) or parse_key("Gm",strict=True)
+    out = output_name(Path(src), src_key, parse_key("Cm",strict=True), 5, Path("."))
     ok = out.name==exp; fails += not ok
     print(f"{'ok ' if ok else 'FAIL'}  {src} -> {out.name} (want {exp})")
 
