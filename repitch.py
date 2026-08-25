@@ -246,20 +246,44 @@ def build_command(engine: str, src: Path, dst: Path, semitones: float,
 # Naming
 # ---------------------------------------------------------------------------
 
+_ACC_ALTS = {
+    "#": r"(?:#|♯|s|sharp)",
+    "B": r"(?:b|♭|flat)",
+}
+
+
+def key_token_pattern(key: Key) -> re.Pattern:
+    """Match any spelling of this key's root in a filename.
+
+    A#m may be written "A#m", "Bbm", "Bb_m", "Bbminor", "Asharp"... - all of
+    them name the same pitch class, so all of them should be replaced.
+    """
+    spellings = sorted(
+        (name for name, pc in PITCH_CLASS.items() if pc == key.pc),
+        key=len, reverse=True,   # try "BB" before "B", or "B" eats the flat
+    )
+    alts = []
+    for spelling in spellings:
+        letter, acc = spelling[0], spelling[1:]
+        # A natural must not swallow the letter of an accidental spelling:
+        # with src_key B, "Bb_124" is B-flat, not B followed by junk.
+        alts.append(letter + (_ACC_ALTS[acc] if acc else r"(?![#b♯♭])"))
+    return re.compile(
+        rf"(?<![A-Za-z0-9])"
+        rf"(?:{'|'.join(alts)})"
+        rf"(?:[ _-]?(?:minor|major|min|maj|m))?"
+        rf"(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+
+
 def output_name(src: Path, src_key: Key | None, dst_key: Key | None,
                 semitones: float, out_dir: Path) -> Path:
     stem = src.stem
     if src_key and dst_key:
         # Replace the old key token in place if we can find it, so
         # "Pad_Gm_124" becomes "Pad_Cm_124" rather than "Pad_Gm_124_Cm".
-        pattern = re.compile(
-            rf"(?<![A-Za-z0-9])"
-            rf"{re.escape(SHARP_NAMES[src_key.pc])}"
-            rf"(?:m|min|minor|maj|major)?"
-            rf"(?![A-Za-z0-9])",
-            re.IGNORECASE,
-        )
-        new_stem, n = pattern.subn(str(dst_key), stem, count=1)
+        new_stem, n = key_token_pattern(src_key).subn(str(dst_key), stem, count=1)
         stem = new_stem if n else f"{stem}_{dst_key}"
     else:
         sign = "+" if semitones >= 0 else ""
