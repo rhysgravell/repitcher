@@ -76,6 +76,12 @@ Keys without an explicit mode default to **minor**.
 - `--formants` helps on vocals and other formant-heavy sources when shifting
   more than a couple of semitones. It's ignored by sox, and mutually
   exclusive with `--tape` (varispeed shifts formants by design).
+- **Two samples can want the same output name.** `Pad_Gm_124` and
+  `Pad_Am_124` both transpose to `Pad_Cm_124`. The second one is skipped
+  instead of overwriting the first - `--overwrite` only covers files left
+  over from an earlier run, not this run's own renders.
+- **`--dry-run` reports the same skips the real run would**, existing files
+  and name clashes included.
 
 ## Tests
 
