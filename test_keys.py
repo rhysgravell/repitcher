@@ -1,6 +1,7 @@
 import sys
+import tempfile
 sys.path.insert(0, '.')
-from repitch import parse_key, semitone_distance, Key, output_name
+from repitch import parse_key, semitone_distance, Key, output_name, claim_output
 from pathlib import Path
 
 cases = [
@@ -43,6 +44,28 @@ for src,exp in naming:
     out = output_name(Path(src), src_key, parse_key("Cm",strict=True), 5, Path("."))
     ok = out.name==exp; fails += not ok
     print(f"{'ok ' if ok else 'FAIL'}  {src} -> {out.name} (want {exp})")
+
+print()
+# Output claims: two sources must never race for the same destination, and a
+# dry run has to reach the same verdicts as the real thing.
+with tempfile.TemporaryDirectory() as d:
+    d = Path(d)
+    (d/"Pad_Cm_124.wav").touch()          # left over from an earlier run
+    gm, am = d/"Pad_Gm_124.wav", d/"Pad_Am_124.wav"
+    dst = d/"Pad_Cm_124.wav"
+    claims = [
+     # (label, src, dst, overwrite, expected name or None)
+     ("existing output, no --overwrite", gm, dst, False, None),
+     ("existing output, --overwrite",    gm, dst, True,  "Pad_Cm_124.wav"),
+     ("second source, same name",        am, dst, True,  None),
+     ("source is its own output",        gm, gm,  True,  "Pad_Gm_124_repitched.wav"),
+    ]
+    claimed = {}
+    for label,src,want_dst,ow,exp in claims:
+        got,reason = claim_output(src, want_dst, claimed, ow)
+        got = got.name if got else None
+        ok = got==exp; fails += not ok
+        print(f"{'ok ' if ok else 'FAIL'}  {label:32} -> {got!s:26} (want {exp})")
 
 print(f"\n{fails} failures")
 sys.exit(1 if fails else 0)

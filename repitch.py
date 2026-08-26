@@ -291,6 +291,29 @@ def output_name(src: Path, src_key: Key | None, dst_key: Key | None,
     return out_dir / f"{stem}{src.suffix}"
 
 
+def claim_output(src: Path, dst: Path, claimed: dict[Path, Path],
+                 overwrite: bool) -> tuple[Path | None, str]:
+    """Decide whether we may write dst, recording the claim if we may.
+
+    Returns (path, "") to go ahead, or (None, reason) to skip this source.
+
+    Two inputs can transpose to the same name - "Pad_Gm_124" and "Pad_Am_124"
+    both become "Pad_Cm_124" - and the second render would quietly destroy the
+    first. The second one always loses, --overwrite or not: that flag is about
+    files from an earlier run, not about eating this run's own output.
+    """
+    if dst.resolve() == src.resolve():
+        # Renaming in place would read and write the same file.
+        dst = dst.with_name(f"{src.stem}_repitched{src.suffix}")
+    key = dst.resolve()
+    if key in claimed:
+        return None, f"would overwrite {dst.name} from {claimed[key].name}"
+    if dst.exists() and not overwrite:
+        return None, f"{dst.name} exists - use --overwrite"
+    claimed[key] = src
+    return dst, ""
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -375,6 +398,7 @@ def main() -> int:
     input_root = args.input if args.input.is_dir() else args.input.parent
 
     done = skipped = failed = 0
+    claimed: dict[Path, Path] = {}   # resolved output -> the source writing it
     for src in files:
         if args.out:
             # Mirror the source's subfolder under -o so recursive runs don't
@@ -400,11 +424,14 @@ def main() -> int:
                 continue
             shift = semitone_distance(src_key, dst_key, args.direction)
 
-        dst = output_name(src, src_key, dst_key, shift, out_dir)
-        if dst.resolve() == src.resolve():
-            dst = out_dir / f"{src.stem}_repitched{src.suffix}"
-        if dst.exists() and not args.overwrite and not args.dry_run:
-            print(f"  skip  {dst.name}  (exists - use --overwrite)")
+        # Claim the output even on a dry run, so the plan we print is the
+        # plan we would actually carry out.
+        dst, reason = claim_output(
+            src, output_name(src, src_key, dst_key, shift, out_dir),
+            claimed, args.overwrite,
+        )
+        if dst is None:
+            print(f"  skip  {src.name}  ({reason})")
             skipped += 1
             continue
 
