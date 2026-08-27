@@ -160,21 +160,33 @@ def semitone_distance(src: Key, dst: Key, direction: str = "nearest") -> int:
 # Pitch shifting engines
 # ---------------------------------------------------------------------------
 
-def detect_engine(preferred: str | None = None) -> str:
+# In preference order. Varispeed is resampling rather than time-stretching,
+# and rubberband has no mode for it, so --tape is served by ffmpeg or sox only.
+ENGINES = ["rubberband", "ffmpeg", "sox"]
+TAPE_ENGINES = ["ffmpeg", "sox"]
+
+
+def detect_engine(preferred: str | None = None, tape: bool = False) -> str:
+    candidates = TAPE_ENGINES if tape else ENGINES
     if preferred and preferred != "auto":
+        if preferred not in candidates:
+            sys.exit(f"--engine {preferred} has no varispeed mode; --tape needs "
+                     f"{' or '.join(TAPE_ENGINES)}.")
+        if not shutil.which(preferred):
+            sys.exit(f"--engine {preferred}: not on PATH. Install it, or drop "
+                     f"--engine to use whatever is available.")
         return preferred
-    if shutil.which("rubberband"):
-        return "rubberband"
-    if shutil.which("ffmpeg"):
-        return "ffmpeg"
-    if shutil.which("sox"):
-        return "sox"
+    for name in candidates:
+        if shutil.which(name):
+            return name
+    installs = {
+        "rubberband": "  brew install rubberband   (best quality, recommended)",
+        "ffmpeg": "  brew install ffmpeg",
+        "sox": "  brew install sox",
+    }
     sys.exit(
-        "No pitch-shifting engine found.\n"
-        "Install one of:\n"
-        "  brew install rubberband   (best quality, recommended)\n"
-        "  brew install ffmpeg\n"
-        "  brew install sox"
+        f"No engine found for {'--tape (varispeed)' if tape else 'pitch shifting'}.\n"
+        "Install one of:\n" + "\n".join(installs[c] for c in candidates)
     )
 
 
@@ -355,8 +367,7 @@ def main() -> int:
     mode_group.add_argument("--formants", action="store_true",
                             help="preserve formants when pitch-shifting - less "
                                  "'chipmunk' effect on vocals (rubberband/ffmpeg only)")
-    ap.add_argument("--engine", choices=["auto", "rubberband", "ffmpeg", "sox"],
-                    default="auto")
+    ap.add_argument("--engine", choices=["auto"] + ENGINES, default="auto")
     ap.add_argument("--quality", choices=["normal", "high"], default="high")
     ap.add_argument("--max-shift", type=float, default=7.0,
                     help="warn above this many semitones (default: 7)")
@@ -383,7 +394,7 @@ def main() -> int:
         if from_key_override is None:
             ap.error(f"could not parse source key: {args.from_key!r}")
 
-    engine = detect_engine(args.engine)
+    engine = detect_engine(args.engine, args.tape)
     if args.formants and engine == "sox":
         print("note: sox has no formant preservation - shifting without it.\n")
 
@@ -454,7 +465,14 @@ def main() -> int:
         out_dir.mkdir(parents=True, exist_ok=True)
         cmd = build_command(engine, src, dst, shift, args.tape, args.quality,
                            args.formants)
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+        except OSError as exc:
+            # A missing binary should read like any other failure, not a
+            # traceback halfway through a folder.
+            print(f"        FAILED: could not run {cmd[0]}: {exc.strerror}")
+            failed += 1
+            continue
         if proc.returncode != 0:
             lines = proc.stderr.strip().splitlines()
             print(f"        FAILED: {lines[-1] if lines else 'unknown error'}")
