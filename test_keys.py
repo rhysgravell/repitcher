@@ -1,7 +1,8 @@
 import sys
 import tempfile
+import shutil
 sys.path.insert(0, '.')
-from repitch import parse_key, semitone_distance, Key, output_name, claim_output
+from repitch import parse_key, semitone_distance, Key, output_name, claim_output, detect_engine
 from pathlib import Path
 
 cases = [
@@ -66,6 +67,32 @@ with tempfile.TemporaryDirectory() as d:
         got = got.name if got else None
         ok = got==exp; fails += not ok
         print(f"{'ok ' if ok else 'FAIL'}  {label:32} -> {got!s:26} (want {exp})")
+
+print()
+# Engine choice has to match the job: --tape is resampling, which rubberband
+# does not do, and an engine that is not installed must not reach subprocess.
+installed = set()
+shutil.which = lambda name, *a, **k: f"/usr/bin/{name}" if name in installed else None
+engines = [
+ # (what is installed, --engine, --tape, expected engine or None for exit)
+ ({"rubberband","ffmpeg","sox"}, "auto",       False, "rubberband"),
+ ({"rubberband","ffmpeg","sox"}, "auto",       True,  "ffmpeg"),
+ ({"rubberband"},                "auto",       False, "rubberband"),
+ ({"rubberband"},                "auto",       True,  None),
+ ({"sox"},                       "auto",       True,  "sox"),
+ ({"rubberband","ffmpeg"},       "rubberband", True,  None),
+ ({"ffmpeg"},                    "sox",        False, None),
+ ({"ffmpeg"},                    "ffmpeg",     True,  "ffmpeg"),
+]
+for have,preferred,tape,exp in engines:
+    installed = have
+    try:
+        got = detect_engine(preferred, tape)
+    except SystemExit:
+        got = None
+    ok = got==exp; fails += not ok
+    flags = f"--engine {preferred}{' --tape' if tape else ''}"
+    print(f"{'ok ' if ok else 'FAIL'}  have {sorted(have)!s:36} {flags:26} -> {got!s:11} (want {exp})")
 
 print(f"\n{fails} failures")
 sys.exit(1 if fails else 0)

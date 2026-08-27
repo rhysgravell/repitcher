@@ -14,6 +14,9 @@ brew install ffmpeg        # also fine - has Rubber Band built in
 
 `repitch.py` auto-detects whichever is present (rubberband > ffmpeg > sox).
 
+`--tape` is the exception: varispeed is resampling, not time-stretching, and
+rubberband has no mode for it, so tape mode needs ffmpeg or sox.
+
 ## Use
 
 ```bash
@@ -72,7 +75,8 @@ Keys without an explicit mode default to **minor**.
 - **Past about 5-6 semitones** you start hearing it. Fine on pads and
   atmospheres, obvious on vocals and acoustic percussion.
 - `--tape` is often the better choice for dub techno - the artefacts are
-  the point, and it keeps the transient character intact.
+  the point, and it keeps the transient character intact. It runs on ffmpeg
+  or sox; a rubberband-only install will tell you so rather than trying.
 - `--formants` helps on vocals and other formant-heavy sources when shifting
   more than a couple of semitones. It's ignored by sox, and mutually
   exclusive with `--tape` (varispeed shifts formants by design).
