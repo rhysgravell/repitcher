@@ -2,7 +2,7 @@ import sys
 import tempfile
 import shutil
 sys.path.insert(0, '.')
-from repitch import parse_key, semitone_distance, Key, output_name, claim_output, detect_engine
+from repitch import parse_key, semitone_distance, Key, output_name, claim_output, detect_engine, compressed_fallback, run_engine
 from pathlib import Path
 
 cases = [
@@ -93,6 +93,35 @@ for have,preferred,tape,exp in engines:
     ok = got==exp; fails += not ok
     flags = f"--engine {preferred}{' --tape' if tape else ''}"
     print(f"{'ok ' if ok else 'FAIL'}  have {sorted(have)!s:36} {flags:26} -> {got!s:11} (want {exp})")
+
+print()
+# Compressed formats: libsndfile (so rubberband and sox) may not open them, so
+# a failed render reaches for ffmpeg - or says why it cannot. Reuses the
+# shutil.which stub above; `installed` decides what is on PATH.
+fallbacks = [
+ # (file, engine that failed, ffmpeg installed, retry engine, hint)
+ ("Pad_Gm.m4a", "rubberband", True,  "ffmpeg", ""),
+ ("Pad_Gm.mp3", "sox",        True,  "ffmpeg", ""),
+ ("Pad_Gm.M4A", "rubberband", True,  "ffmpeg", ""),
+ ("Pad_Gm.m4a", "rubberband", False, None, ".m4a needs ffmpeg to decode - brew install ffmpeg"),
+ ("Pad_Gm.m4a", "ffmpeg",     True,  None, ""),   # ffmpeg already tried
+ ("Pad_Gm.wav", "rubberband", True,  None, ""),   # nothing to do with format
+]
+for name,engine,have_ffmpeg,exp_alt,exp_hint in fallbacks:
+    installed = {"ffmpeg"} if have_ffmpeg else set()
+    alt,hint = compressed_fallback(Path(name), engine)
+    ok = (alt,hint)==(exp_alt,exp_hint); fails += not ok
+    print(f"{'ok ' if ok else 'FAIL'}  {name:12} {engine:11} ffmpeg={str(have_ffmpeg):5} -> {alt!s:7} {hint}")
+
+print()
+for cmd,exp_ok,exp_why in [
+ (["true"],  True,  ""),
+ (["false"], False, "unknown error"),
+ (["definitely-not-a-real-binary"], False, "could not run"),
+]:
+    got_ok,why = run_engine(cmd)
+    ok = got_ok==exp_ok and why.startswith(exp_why); fails += not ok
+    print(f"{'ok ' if ok else 'FAIL'}  run_engine({cmd[0]}) -> {got_ok} {why!r} (want {exp_ok} {exp_why!r}...)")
 
 print(f"\n{fails} failures")
 sys.exit(1 if fails else 0)
