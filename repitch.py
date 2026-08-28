@@ -190,6 +190,36 @@ def detect_engine(preferred: str | None = None, tape: bool = False) -> str:
     )
 
 
+# rubberband and sox decode through libsndfile, whose support for these
+# depends on how it was built: .m4a never works, .mp3 and .ogg only on recent
+# versions. Rather than keep a version table, we let the render fail and then
+# reach for ffmpeg, which handles all three.
+COMPRESSED_EXTS = {".mp3", ".m4a", ".ogg"}
+
+
+def compressed_fallback(src: Path, engine: str) -> tuple[str | None, str]:
+    """After a failed render: (engine to retry with, hint to print instead)."""
+    if engine == "ffmpeg" or src.suffix.lower() not in COMPRESSED_EXTS:
+        return None, ""
+    if shutil.which("ffmpeg"):
+        return "ffmpeg", ""
+    return None, f"{src.suffix} needs ffmpeg to decode - brew install ffmpeg"
+
+
+def run_engine(cmd: list[str]) -> tuple[bool, str]:
+    """Run one render. Returns (ok, reason it failed)."""
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as exc:
+        # A missing binary should read like any other failure, not a
+        # traceback halfway through a folder.
+        return False, f"could not run {cmd[0]}: {exc.strerror}"
+    if proc.returncode != 0:
+        lines = proc.stderr.strip().splitlines()
+        return False, lines[-1] if lines else "unknown error"
+    return True, ""
+
+
 def probe_samplerate(src: Path) -> int:
     """Read the sample rate, falling back to 44100 if we can't."""
     if src.suffix.lower() == ".wav":
@@ -463,26 +493,28 @@ def main() -> int:
             continue
 
         out_dir.mkdir(parents=True, exist_ok=True)
-        cmd = build_command(engine, src, dst, shift, args.tape, args.quality,
-                           args.formants)
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True)
-        except OSError as exc:
-            # A missing binary should read like any other failure, not a
-            # traceback halfway through a folder.
-            print(f"        FAILED: could not run {cmd[0]}: {exc.strerror}")
-            failed += 1
-            continue
-        if proc.returncode != 0:
-            lines = proc.stderr.strip().splitlines()
-            print(f"        FAILED: {lines[-1] if lines else 'unknown error'}")
+
+        ok, why = run_engine(build_command(engine, src, dst, shift, args.tape,
+                                           args.quality, args.formants))
+        hint = ""
+        if not ok:
+            alt, hint = compressed_fallback(src, engine)
+            if alt:
+                print(f"        {engine} cannot open {src.suffix} - "
+                      f"retrying with {alt}")
+                ok, why = run_engine(build_command(alt, src, dst, shift,
+                                                   args.tape, args.quality,
+                                                   args.formants))
+        if ok:
+            done += 1
+        else:
+            print(f"        FAILED: {why}"
+                  + (f"\n        {hint}" if hint else ""))
             try:  # don't leave a truncated file behind
                 dst.unlink(missing_ok=True)
             except OSError:
                 pass
             failed += 1
-        else:
-            done += 1
 
     print(f"\ndone: {done}   skipped: {skipped}   failed: {failed}")
     return 0 if failed == 0 else 1

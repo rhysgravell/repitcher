@@ -17,6 +17,10 @@ brew install ffmpeg        # also fine - has Rubber Band built in
 `--tape` is the exception: varispeed is resampling, not time-stretching, and
 rubberband has no mode for it, so tape mode needs ffmpeg or sox.
 
+`.mp3`, `.m4a` and `.ogg` need ffmpeg too: rubberband and sox decode through
+libsndfile, which may not open them. Those files are retried on ffmpeg
+automatically if it is installed.
+
 ## Use
 
 ```bash
