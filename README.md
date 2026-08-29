@@ -81,6 +81,10 @@ Keys without an explicit mode default to **minor**.
 - `--tape` is often the better choice for dub techno - the artefacts are
   the point, and it keeps the transient character intact. It runs on ffmpeg
   or sox; a rubberband-only install will tell you so rather than trying.
+- **`--tape` renames the tempo too.** Varispeed drags the BPM along with the
+  pitch, so `Pad_Gm_124` at +5st is written out as `Pad_Cm_166` - the name has
+  to keep telling the truth. `124bpm` and `124 BPM` are recognised as well;
+  numbers outside 40-300 BPM (an 808, a take number) are left alone.
 - `--formants` helps on vocals and other formant-heavy sources when shifting
   more than a couple of semitones. It's ignored by sox, and mutually
   exclusive with `--tape` (varispeed shifts formants by design).

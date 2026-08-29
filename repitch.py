@@ -319,9 +319,38 @@ def key_token_pattern(key: Key) -> re.Pattern:
     )
 
 
+# A tempo in a sample name: "124", "124bpm", "128 BPM". Anything outside a
+# plausible musical range is some other number - an 808, a take, a year.
+_BPM_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9])(\d{2,3})[ _-]?(bpm)?(?![A-Za-z0-9])", re.IGNORECASE
+)
+BPM_RANGE = range(40, 301)
+
+
+def retempo_name(stem: str, ratio: float) -> str:
+    """Rewrite the tempo in a filename after a varispeed shift.
+
+    Tape mode moves tempo with pitch, so "Pad_Gm_124" at +5st is not a 124 BPM
+    loop any more - it is a 166 BPM one, and a name that says otherwise will
+    mislead every sampler and search box it ever meets.
+    """
+    hits = [m for m in _BPM_TOKEN.finditer(stem) if int(m.group(1)) in BPM_RANGE]
+    if not hits:
+        return stem
+    # Rightmost wins, as with keys: packs put the tempo near the end. An
+    # explicit "124bpm" beats a bare number wherever the two of them sit.
+    labelled = [m for m in hits if m.group(2)]
+    m = (labelled or hits)[-1]
+    return stem[:m.start(1)] + str(round(int(m.group(1)) * ratio)) + stem[m.end(1):]
+
+
 def output_name(src: Path, src_key: Key | None, dst_key: Key | None,
-                semitones: float, out_dir: Path) -> Path:
+                semitones: float, out_dir: Path, tape: bool = False) -> Path:
     stem = src.stem
+    if tape and semitones:
+        # Before any suffix we append below, so we only ever read the tempo the
+        # sample came with.
+        stem = retempo_name(stem, 2 ** (semitones / 12))
     if src_key and dst_key:
         # Replace the old key token in place if we can find it, so
         # "Pad_Gm_124" becomes "Pad_Cm_124" rather than "Pad_Gm_124_Cm".
@@ -468,7 +497,7 @@ def main() -> int:
         # Claim the output even on a dry run, so the plan we print is the
         # plan we would actually carry out.
         dst, reason = claim_output(
-            src, output_name(src, src_key, dst_key, shift, out_dir),
+            src, output_name(src, src_key, dst_key, shift, out_dir, args.tape),
             claimed, args.overwrite,
         )
         if dst is None:

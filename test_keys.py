@@ -47,6 +47,27 @@ for src,exp in naming:
     print(f"{'ok ' if ok else 'FAIL'}  {src} -> {out.name} (want {exp})")
 
 print()
+# Tape mode moves tempo with pitch, so the BPM in the name has to move with it.
+gm, cm = parse_key("Gm",strict=True), parse_key("Cm",strict=True)
+tempos = [
+ # (filename, src key, semitones, --tape, expected output name)
+ ("Pad_Gm_124.wav",       gm,   5,   True,  "Pad_Cm_166.wav"),
+ ("Pad_Gm_124.wav",       gm,   5,   False, "Pad_Cm_124.wav"),   # stretching keeps it
+ ("Pad_Gm_124bpm.wav",    gm,   5,   True,  "Pad_Cm_166bpm.wav"),
+ ("Pad Gm 124 BPM.wav",   gm,   5,   True,  "Pad Cm 166 BPM.wav"),
+ ("Kick_Gm_90.wav",       gm,  -7,   True,  "Kick_Cm_60.wav"),
+ ("Loop_808_Gm_124.wav",  gm,   5,   True,  "Loop_808_Cm_166.wav"),  # 808 is not a tempo
+ ("Take_60_Gm_124bpm.wav",gm,   5,   True,  "Take_60_Cm_166bpm.wav"),# labelled one wins
+ ("Pad_Gm.wav",           gm,   5,   True,  "Pad_Cm.wav"),           # no tempo to move
+ ("Loop_124.wav",         None,-12,  True,  "Loop_62_-12st.wav"),    # --semitones path
+]
+for name,src_key,st,tape,exp in tempos:
+    out = output_name(Path(name), src_key, cm if src_key else None, st, Path("."), tape)
+    ok = out.name==exp; fails += not ok
+    flag = "--tape" if tape else "      "
+    print(f"{'ok ' if ok else 'FAIL'}  {name:24}{st:+3d}st {flag} -> {out.name:24} (want {exp})")
+
+print()
 # Output claims: two sources must never race for the same destination, and a
 # dry run has to reach the same verdicts as the real thing.
 with tempfile.TemporaryDirectory() as d:
